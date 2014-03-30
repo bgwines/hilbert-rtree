@@ -1,3 +1,6 @@
+{-# LANGUAGE TypeSynonymInstances #-}
+{-# LANGUAGE FlexibleInstances #-}
+
 import System.IO
 import System.CPUTime
 
@@ -13,12 +16,18 @@ type Point = [Integer]
 
 type Hull = [Point]
 
-build_hrtree :: String -> HRtree Hull
+class Euclidean a where
+	hvalue :: a -> Integer
+
+instance Euclidean Point where
+	hvalue = sum
+
+build_hrtree :: String -> HRtree Point
 build_hrtree contents =
 	let
-		hulls = (map read . lines $ contents) :: [Hull]
+		points = (map read . lines $ contents) :: [Point]
 	in
-		HRtree.fromList hulls
+		HRtree.fromList points
 
 time :: IO t -> IO t
 time a = do
@@ -29,14 +38,14 @@ time a = do
     printf "Computation time: %0.3f sec\n" (diff :: Double)
     return v
 
-time_query :: HRtree Hull -> String -> String
+time_query :: HRtree Point -> String -> String
 time_query hrtree query =
 	let
-		query' = (read query) :: Hull
+		query' = (read query) :: Point
 	in
 		if (HRtree.elem query' hrtree) then "YES\n" else "NO\n"
 {-	let
-		query' = (read query) :: Hull
+		query' = (read query) :: Point
 		result = (show query) ++
 			if (HRtree.elem query' Hrtree) then "YES\n" else "NO\n"
 	in
