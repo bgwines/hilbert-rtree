@@ -1,5 +1,7 @@
---{-# LANGUAGE TypeSynonymInstances #-}
---{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE TypeSynonymInstances #-}
+{-# LANGUAGE FlexibleInstances #-}
+--{-# LANGUAGE -XInstanceSigs #-}
+
 
 module HRTree
 ( HRTree(..)
@@ -14,33 +16,147 @@ import qualified Data.Char as Char
 import qualified Data.List as List
 import qualified Data.Ord as Ord
 
--- TODO: MBR, LHV
+data Point = Point [Integer] deriving Show
 
-type Point = [Integer]
-type Rectangle = [Point]
+type Rectangle = [(Integer, Integer)] -- [(max, min)]
+
+dimension :: Point -> Integer
+dimension p@(Point coords) = length' coords
+
+head' :: Point -> Integer
+head' p@(Point coords) = head coords
+
+point_index :: Point -> Integer -> Integer
+point_index p@(Point coords) i = coords !! (fromInteger i)
+
+aslist :: Point -> [Integer]
+aslist p@(Point coords) = coords
+
+instance Eq Point where
+	(==) p1@(Point xs) p2@(Point ys) =
+		(dimension p1 == dimension p2)
+		&& 
+		(and $ zipWith (==) xs ys)
+
+list_plus :: (Num a) => [a] -> [a] -> [a]
+list_plus = zipWith (+)
+
+point_plus :: Point -> Point -> Point
+point_plus p1@(Point xs) p2@(Point ys) = Point (xs `list_plus` ys)
+
+same :: (Eq a) => a -> a -> Maybe a
+same a b = if a == b
+	then Just a
+	else Nothing
+
+comp_points :: (Integer -> Integer -> Bool) -> Point -> Point -> Maybe Bool
+comp_points op p1@(Point xs) p2@(Point ys)
+	| (dimension p1 == 0) = Nothing
+	| (dimension p2 == 0) = Nothing
+	| otherwise =
+		let
+			(x0, y0) = (head xs, head ys)
+			c0 = x0 < y0
+		in
+			foldl (>>=) (return c0)
+				. map same
+					$ zipWith (op) xs ys
+
+remove_maybe_level :: Maybe (Maybe a) -> Maybe a
+remove_maybe_level (Nothing) = Nothing
+remove_maybe_level (Just x) = x
+
+comp_point_lists :: (Point -> Point -> (Maybe Bool)) -> [Point] -> [Point] -> Maybe Bool
+comp_point_lists op xs ys
+	| (length xs == 0) = Nothing
+	| (length ys == 0) = Nothing
+	| otherwise =
+		let
+			(x0, y0) = (head xs, head ys)
+			c0 = (<<) x0 y0
+		in
+			remove_maybe_level
+				. foldl (>>=) (return c0)
+					. map same
+						$ zipWith (op) xs ys
+
+class (Eq a) => MaybeOrd a where
+	(<<) :: a -> a -> Maybe Bool
+	(>>) :: a -> a -> Maybe Bool
+
+instance MaybeOrd Point where
+	(<<) = comp_points (<)
+	(>>) = comp_points (>)
+
+instance MaybeOrd [Point] where
+	(<<) = comp_point_lists (HRTree.<<)
+	(>>) = comp_point_lists (HRTree.>>)
 
 data HRTree a
 	= Empty
-	| HRTreeLeaf [a]            -- TODO: store MBR, LHV here
-	| HRTreeInterior [HRTree a] -- TODO: store MBR, LHV here
+	| HRTreeLeaf [a]
+	| HRTreeInterior [HRTree a]
 		deriving (Show, Eq)
 
-class (Ord a) => (Euclidean a) where
+class (Eq a) => (Euclidean a) where
 	hvalue :: a -> Integer
+	asrect :: a -> Rectangle
+	inside :: a -> Point -> Bool
+	center :: a -> Point
+	e_mbr  :: [a] -> Rectangle
 
-{-class HRTreeNode a where
-	mbr :: a -> [Point] -- minimum bounding rectangle
+instance Euclidean Point where
+	hvalue p = 142857 -- TODO
+	asrect p = map (\(i, p) -> let x = p `point_index` i in (x, x)) . zipWith (\i l -> (i, l)) [0..] . replicate (2 ^ (dimension p)) $ p
+	inside p p' = p == p'
+	center = id
+	e_mbr ps = [] -- TODO
+
+pointDiv :: Point -> Integer -> Point
+pointDiv (Point xs) denominator = Point (map (flip div denominator) xs)
+
+instance Euclidean Rectangle where
+	--hvalue :: Rectangle -> Integer
+	hvalue list = hvalue . center $ list
+
+	--asrect :: Rectangle -> Integer -> Rectangle
+	asrect = id
+
+	--inside :: Rectangle -> Point -> Bool
+	inside list point = and $ zipWith f (aslist point) list
+		where f coord (min_value, max_value) =
+			(min_value < coord) && (coord < max_value)
+
+	--center :: Rectangle -> Point
+	--TODO: right?
+	center list = Point (map pair_avg list)
+		where pair_avg (min, max) = (min + max) `div` 2
+
+	e_mbr rects = foldl1 update_best_so_far rects
+		where
+			--update_best_so_far :: Rectangle -> Rectangle -> Rectangle
+			update_best_so_far a b = zipWith f a b
+			f (min0, max0) (min1, max1) = (min min0 min1, max max0 max1)
+
+
+class HRTreeNode a where
+	mbr :: a -> Rectangle -- minimum bounding rectangle
 	lhv :: a -> Integer -- largest Hilbert value (of children)
+	get_children :: a -> [a]
 
-instance HRTreeNode ((Euclidean a) => HRTree a) where
-	mbr rtree@Empty                     = []
-	mbr rtree@(HRTreeLeaf es)           = []
-	mbr rtree@(HRTreeInterior children) = []
+instance (Euclidean a) => HRTreeNode (HRTree a) where
+	mbr hrtree@Empty                     = []
+	mbr hrtree@(HRTreeLeaf es)           = e_mbr es
+	mbr hrtree@(HRTreeInterior children) = e_mbr . map mbr $ children
 
-	lhv rtree@Empty                     = 0
-	lhv rtree@(HRTreeLeaf es)           = maximum . map hvalue $ es
-	lhv rtree@(HRTreeInterior children) = maximum . map lhv $ children
--}
+	lhv hrtree@Empty                     = error "Empty nodes don't have LHVs"
+	lhv hrtree@(HRTreeLeaf es)           = maximum . map hvalue $ es
+	lhv hrtree@(HRTreeInterior children) = maximum . map lhv $ children
+
+	get_children hrtree@Empty                   = error "Can only get children from an interior node."
+	get_children hrtree@(HRTreeLeaf es)         = error "Can only get children from an interior node."
+	get_children hrtree@(HRTreeInterior children) = children
+
 length' :: [a] -> Integer
 length' = toInteger . length
 
@@ -74,11 +190,6 @@ takeWhileAndRest f l@(x:xs) = if not (f x)
 	else (x:(fst rec), snd rec)
 		where rec = takeWhileAndRest f xs
 
-lhv :: (Euclidean a) => HRTree a -> Integer
-lhv node@Empty                     = error "Empty nodes don't have LHVs"
-lhv node@(HRTreeLeaf es)           = maximum . map hvalue $ es
-lhv node@(HRTreeInterior children) = maximum . map lhv $ children
-
 pick_insertion_child :: (Euclidean a) => a -> HRTree a -> HRTree a
 pick_insertion_child e node@Empty                     = error "Empty nodes have no children."
 pick_insertion_child e node@(HRTreeLeaf es)           = error "Leaf nodes have no children."
@@ -98,23 +209,19 @@ insert e hrtree =
 		else
 			HRTreeInterior [hrtree', split']
 
-get_children :: HRTree a -> [HRTree a]
-get_children node@(HRTreeInterior children) = children
-get_children _ = error "Can only get children from an interior node."
-
 insert_rec :: (Euclidean a) => a -> HRTree a -> (HRTree a, Maybe (HRTree a))
 insert_rec e node@Empty = (HRTreeLeaf [e], Nothing)
 
 insert_rec e node@(HRTreeLeaf es) =
 	if node_is_full node
-		then (node, Just (HRTreeLeaf [e])) -- TODO: split properly
+		then (node, Just (HRTreeLeaf [e]))
 		else (HRTreeLeaf (e : es), Nothing)
 
 insert_rec e node@(HRTreeInterior children) =
 	if split == Nothing
 		then (node', Nothing)
 		else if node_is_full node'
-			then (node', Just (HRTreeInterior [split'])) -- TODO: split properly
+			then (node', Just (HRTreeInterior [split']))
 			else (node'', Nothing)
 	where
 		insertion_child = pick_insertion_child e node
@@ -139,15 +246,17 @@ insert_rec e node@(HRTreeInterior children) =
 				partition_size =
 					(length children_of_children) `div` (length nodes)
 
-overlaps :: (Euclidean a) => a -> HRTree a -> Bool
-overlaps e node = True -- TODO
+--inside :: a -> Point -> Bool
+overlaps :: Rectangle -> Rectangle -> Bool
+overlaps a b = True--or $ map (inside a) (asrect b) -- TODO
 
 elem :: (Euclidean a) => a -> HRTree a -> Bool
 elem e hrtree@Empty = False
 elem e hrtree@(HRTreeLeaf es) = e `List.elem` es
 elem e hrtree@(HRTreeInterior children) =
 	let
-		possible_children = filter (overlaps e) children
+		possible_children = filter overlapping children
+		overlapping child = overlaps (asrect e) (mbr child)
 	in
 		or . map (HRTree.elem e) $ possible_children
 
