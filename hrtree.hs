@@ -15,6 +15,7 @@ module HRTree
 import qualified Data.Char as Char
 import qualified Data.List as List
 import qualified Data.Ord as Ord
+import qualified Data.Bits as Bits
 
 data Point = Point [Integer] deriving Show
 
@@ -269,7 +270,35 @@ count hrtree@(HRTreeInterior children) = sum . map HRTree.count $ children
 empty :: HRTree a
 empty = Empty
 
+-------------------------------
+--           Tests           --
+-------------------------------
 
+
+xy2d :: Integer -> (Integer, Integer) -> Integer
+xy2d n (x, y) = xy2d' n (x, y) (n `div` 2)
+
+xy2d' :: Integer -> (Integer, Integer) -> Integer -> Integer
+xy2d' n (x, y) s
+	| (s == 0) = 0
+	| otherwise = d + rec
+		where
+			rx = if (x Bits..&. s) > 0 then 1 else 0
+			ry = if (y Bits..&. s) > 0 then 1 else 0
+			(x', y') = rot s (x, y) rx ry
+			s' = (s `div` 2)
+
+			d = (s^2) * ((3 * rx)^ry)
+			rec = xy2d' n (x', y') s'
+
+-- Rotate or flip a quadrant appropriately
+rot :: Integer -> (Integer, Integer) -> Integer -> Integer -> (Integer, Integer)
+rot n (x, y) rx ry =
+	if ry == 0
+		then if rx == 1
+			then (n - 1 - y, n - 1 - x)
+			else (y, x)
+		else (x, y)
 
 -------------------------------
 --           Tests           --
