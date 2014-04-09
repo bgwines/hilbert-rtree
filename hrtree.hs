@@ -112,8 +112,8 @@ instance Euclidean Point where
 	center = id
 	e_mbr ps = [] -- TODO
 
-pointDiv :: Point -> Integer -> Point
-pointDiv (Point xs) denominator = Point (map (flip div denominator) xs)
+point_div :: Point -> Integer -> Point
+point_div (Point xs) denominator = Point (map (flip div denominator) xs)
 
 instance Euclidean Rectangle where
 	--hvalue :: Rectangle -> Integer
@@ -173,9 +173,6 @@ node_is_full node = (node_size node) == max_node_size
 
 max_node_size :: Integer -- TODO: take in m in ctor?
 max_node_size = 5
-
-empty :: HRTree a
-empty = Empty
 
 partition :: Int -> [a] -> [[a]]
 partition len l =
@@ -247,8 +244,8 @@ insert_rec e node@(HRTreeInterior children) =
 					(length children_of_children) `div` (length nodes)
 
 --inside :: a -> Point -> Bool
-overlaps :: Rectangle -> Rectangle -> Bool
-overlaps a b = True--or $ map (inside a) (asrect b) -- TODO
+rects_overlap :: Rectangle -> Rectangle -> Bool
+rects_overlap a b = True--or $ map (inside a) (asrect b) -- TODO
 
 elem :: (Euclidean a) => a -> HRTree a -> Bool
 elem e hrtree@Empty = False
@@ -256,7 +253,7 @@ elem e hrtree@(HRTreeLeaf es) = e `List.elem` es
 elem e hrtree@(HRTreeInterior children) =
 	let
 		possible_children = filter overlapping children
-		overlapping child = overlaps (asrect e) (mbr child)
+		overlapping child = rects_overlap (asrect e) (mbr child)
 	in
 		or . map (HRTree.elem e) $ possible_children
 
@@ -268,4 +265,179 @@ count :: HRTree a -> Integer
 count hrtree@Empty = 0
 count hrtree@(HRTreeLeaf es) = length' es
 count hrtree@(HRTreeInterior children) = sum . map HRTree.count $ children
+
+empty :: HRTree a
+empty = Empty
+
+
+
+-------------------------------
+--           Tests           --
+-------------------------------
+
+pair :: a -> b -> (a, b)
+pair a b = (a, b)
+
+map_keep :: (a -> b) -> [a] -> [(a, b)]
+map_keep f l = zipWith pair l (map f l)
+
+pt_arr :: [Integer]
+pt_arr = [0..4]
+
+test_pt :: Point
+test_pt = Point pt_arr
+
+pt_empty :: Point
+pt_empty = Point []
+
+test_leaf_node1 :: HRTree Point
+test_leaf_node1 = HRTreeLeaf [test_pt, test_pt]
+
+test_leaf_node2 :: HRTree Point
+test_leaf_node2 = HRTreeLeaf [test_pt, test_pt, test_pt]
+
+test_interior_node :: HRTree Point
+test_interior_node = HRTreeInterior [test_leaf_node1, test_leaf_node2]
+
+-- dimension :: Point -> Integer
+test_dimension =
+	((dimension test_pt) == 5) &&
+	((dimension pt_empty) == 0)
+
+-- head' :: Point -> Integer
+test_head =
+	((head' test_pt) == head pt_arr)
+
+-- point_index :: Point -> Integer -> Integer
+test_point_index =
+	(or . map (\(e, i) -> (e == i)) . map_keep (point_index test_pt) $ pt_arr)
+
+-- aslist :: Point -> [Integer]
+test_aslist =
+	(aslist test_pt) == pt_arr
+
+-- list_plus :: (Num a) => [a] -> [a] -> [a]
+test_list_plus =
+	([1..4] `list_plus` [5..8] == [6,8,10,12])
+
+-- point_plus :: Point -> Point -> Point
+test_point_plus =
+	((Point [1..4]) `point_plus` (Point [5..8]) == Point [6,8,10,12])
+
+-- comp_points :: (Integer -> Integer -> Bool) -> Point -> Point -> Maybe Bool
+test_comp_points =
+	((Point [1..4] HRTree.<< Point [5..8]) == Just True) &&
+	((Point [1..4] HRTree.>> Point [5..8]) == Nothing) &&
+	
+	((Point [1..4] HRTree.<< Point [2..5]) == Just True) &&
+	((Point [1..4] HRTree.>> Point [2..5]) == Nothing) &&
+	
+	((Point [1..4] HRTree.<< Point [4..1]) == Nothing) &&
+	((Point [1..4] HRTree.>> Point [4..1]) == Nothing) &&
+	
+	((Point [1..4] HRTree.<< Point [2,3,4,4]) == Nothing)
+
+-- comp_point_lists :: (Point -> Point -> (Maybe Bool)) -> [Point] -> [Point] -> Maybe Bool
+test_comp_point_lists =
+	(([Point [1..4]] HRTree.<< [Point [5..8]]) == Just True) &&
+	(([Point [1..4]] HRTree.>> [Point [5..8]]) == Nothing) &&
+
+	(([Point [1..4]] HRTree.<< [Point [2..5]]) == Just True) &&
+	(([Point [1..4]] HRTree.>> [Point [2..5]]) == Nothing) &&
+
+	(([Point [1..4]] HRTree.<< [Point [4..1]]) == Nothing) &&
+	(([Point [1..4]] HRTree.>> [Point [4..1]]) == Nothing)
+
+-- point_div :: Point -> Integer -> Point
+test_point_div =
+	(test_pt `point_div` 1 == test_pt)
+
+-- node_size :: HRTree a -> Integer
+test_node_size =
+	((node_size test_interior_node) == 2) &&
+	((node_size test_leaf_node1) == 2) &&
+	((node_size test_leaf_node2) == 3)
+
+-- partition :: Int -> [a] -> [[a]]
+test_partition =
+	((partition 3 [1..10]) == [[1,2,3], [4,5,6], [7,8,9], [10]])
+
+-- takeWhileAndRest :: (a -> Bool) -> [a] -> ([a], [a])
+test_takeWhileAndRest =
+	((takeWhileAndRest (<3) [1..10]) == ([1,2],[3,4,5,6,7,8,9,10]))
+
+-- pick_insertion_child :: (Euclidean a) => a -> HRTree a -> HRTree a
+test_pick_insertion_child = False
+
+-- insert :: (Euclidean a) => a -> HRTree a -> HRTree a
+test_insert = False
+
+-- insert_rec :: (Euclidean a) => a -> HRTree a -> (HRTree a, Maybe (HRTree a))
+test_insert_rec = False
+
+-- rects_overlap :: Rectangle -> Rectangle -> Bool
+test_rects_overlap = False
+
+-- elem :: (Euclidean a) => a -> HRTree a -> Bool
+test_elem = False
+
+-- fromList :: (Euclidean a) => [a] -> HRTree a
+test_fromList = False
+
+-- count :: HRTree a -> Integer
+test_count = False
+
+-- empty :: HRTree a
+test_empty = False
+
+tests :: [Bool]
+tests = [test_dimension,
+	test_head,
+	test_point_index,
+	test_aslist,
+	test_list_plus,
+	test_point_plus,
+	test_comp_points,
+	test_comp_point_lists,
+	test_point_div,
+	test_node_size,
+	test_partition,
+	test_takeWhileAndRest,
+	test_pick_insertion_child,
+	test_insert,
+	test_insert_rec,
+	test_rects_overlap,
+	test_elem,
+	test_fromList,
+	test_count,
+	test_empty]
+
+test_names :: [String]
+test_names = ["test_dimension",
+	"test_head",
+	"test_point_index",
+	"test_aslist",
+	"test_list_plus",
+	"test_point_plus",
+	"test_comp_points",
+	"test_comp_point_lists",
+	"test_point_div",
+	"test_node_size",
+	"test_partition",
+	"test_takeWhileAndRest",
+	"test_pick_insertion_child",
+	"test_insert",
+	"test_insert_rec",
+	"test_rects_overlap",
+	"test_elem",
+	"test_fromList",
+	"test_count",
+	"test_empty"]
+
+run_tests :: IO ()
+run_tests = putStrLn $ foldl1 (++) $ zipWith print_result tests test_names
+	where print_result test name =
+		if test
+			then "succeeded: " ++ name ++ "\n"
+			else "FAILED   : " ++ name ++ "\n"
 
