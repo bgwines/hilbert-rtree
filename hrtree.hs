@@ -98,6 +98,11 @@ lhv hrtree@Empty                     = error "Empty nodes don't have LHVs"
 lhv hrtree@(HRTreeLeaf es)           = maximum . map hvalue $ es
 lhv hrtree@(HRTreeInterior children) = maximum . map lhv $ children
 
+get_elements :: HRTree -> [Point]
+get_elements hrtree@Empty                   = error "Can only get elements from a leaf node."
+get_elements hrtree@(HRTreeLeaf es)         = es
+get_elements hrtree@(HRTreeInterior children) = error "Can only get elements from a leaf node."
+
 get_children :: HRTree -> [HRTree]
 get_children hrtree@Empty                   = error "Can only get children from an interior node."
 get_children hrtree@(HRTreeLeaf es)         = error "Can only get children from an interior node."
@@ -161,7 +166,7 @@ point_in_rect p list = and $ zipWith f (aslist p) list
 insert :: Point -> HRTree -> HRTree
 insert p hrtree =
 	if (maximum . aslist $ p) >= grid_size -- < ?
-		then undefined
+		then error "Nope. Point has coordinate that's too big."
 		else
 			let
 				(hrtree', split) = insert_rec p hrtree
@@ -194,21 +199,28 @@ insert_rec e node@(HRTreeInterior children) =
 		(insertion_child', split) = HRTree.insert_rec e insertion_child
 		split' = from_just split
 
-		node' = HRTreeInterior (insertion_child' : children_minus_insertion_child) -- TODO: order by HV
-		node'' = HRTreeInterior (redistribute $ (split' : insertion_child' : children_minus_insertion_child))
+		node'  = HRTreeInterior (                         insertion_child' : children_minus_insertion_child) -- TODO: order by HV
+		node'' = HRTreeInterior (redistribute split' $ (split' : insertion_child' : children_minus_insertion_child))
 
-		redistribute :: [HRTree] -> [HRTree]
-		redistribute nodes = map HRTreeInterior children_of_children' -- or HRTreeLeaf?
-			where
-				children_of_children = concat . map get_children $ nodes
-				children_of_children' =
-					partition partition_size
-						. List.sortBy (Ord.comparing lhv)
-							$ children_of_children
+-- super-hacky usage of run-time type-getting, here.
+redistribute :: HRTree -> [HRTree] -> [HRTree]
+redistribute _type@(HRTreeLeaf _) nodes = map HRTreeLeaf children_of_children_redistributed -- or HRTreeLeaf?
+	where
+		children_of_children = concat . map get_elements $ nodes
+		
+		children_of_children_sorted = List.sortBy (Ord.comparing hvalue) children_of_children
+		
+		children_of_children_redistributed = partition partition_size children_of_children_sorted
+			where partition_size = (length children_of_children) `div` (length nodes)
 
-				partition_size =
-					(length children_of_children) `div` (length nodes)
-
+redistribute _type@(HRTreeInterior _) nodes = map HRTreeInterior children_of_children_redistributed -- or HRTreeLeaf?
+	where
+		children_of_children = concat . map get_children $ nodes
+		
+		children_of_children_sorted = List.sortBy (Ord.comparing lhv) children_of_children
+		
+		children_of_children_redistributed = partition partition_size children_of_children_sorted
+			where partition_size = (length children_of_children) `div` (length nodes)
 
 -- helpers
 
