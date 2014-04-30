@@ -112,9 +112,13 @@ pick_insertion_child :: Point -> HRTree -> HRTree
 pick_insertion_child e node@Empty                     = error "Empty nodes have no children."
 pick_insertion_child e node@(HRTreeLeaf es)           = error "Leaf nodes have no children."
 pick_insertion_child e node@(HRTreeInterior children) =
-	List.minimumBy (Ord.comparing lhv)
-		. filter (\child -> (lhv child) < hvalue e)
-			$ children
+	let
+		valid_children = filter (\c -> (lhv c) < (hvalue e)) children
+		insertion_children = if length valid_children == 0
+			then children
+			else valid_children
+	in
+		List.minimumBy (Ord.comparing lhv) insertion_children
 
 fromList :: [Point] -> HRTree
 fromList elems =
